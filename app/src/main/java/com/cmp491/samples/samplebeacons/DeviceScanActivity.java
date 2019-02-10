@@ -15,6 +15,7 @@ package com.cmp491.samples.samplebeacons;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import android.Manifest;
 import android.app.Activity;
 import android.app.ListActivity;
 import android.bluetooth.BluetoothAdapter;
@@ -23,8 +24,11 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.annotation.NonNull;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -47,6 +51,8 @@ public class DeviceScanActivity extends ListActivity {
     private static final int REQUEST_ENABLE_BT = 1;
     // Stops scanning after 10 seconds.
     private static final long SCAN_PERIOD = 10000;
+    private static final int PERMISSION_REQUEST_COARSE_LOCATION = 456;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,7 +75,26 @@ public class DeviceScanActivity extends ListActivity {
             finish();
             return;
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, PERMISSION_REQUEST_COARSE_LOCATION);
+        }
     }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
+        switch (requestCode) {
+            case PERMISSION_REQUEST_COARSE_LOCATION: {
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Permission granted, yay! Start the Bluetooth device scan.
+                } else {
+                    // Alert the user that this application requires the location permission to perform the scan.
+                    Toast.makeText(this, "Try again!", Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
@@ -109,6 +134,7 @@ public class DeviceScanActivity extends ListActivity {
                 startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
             }
         }
+
         // Initializes list view adapter.
         mLeDeviceListAdapter = new LeDeviceListAdapter();
         setListAdapter(mLeDeviceListAdapter);
@@ -155,6 +181,7 @@ public class DeviceScanActivity extends ListActivity {
             }, SCAN_PERIOD);
             mScanning = true;
             mBluetoothAdapter.startLeScan(mLeScanCallback);
+
         } else {
             mScanning = false;
             mBluetoothAdapter.stopLeScan(mLeScanCallback);
@@ -164,20 +191,24 @@ public class DeviceScanActivity extends ListActivity {
     // Adapter for holding devices found through scanning.
     private class LeDeviceListAdapter extends BaseAdapter {
         private ArrayList<BluetoothDevice> mLeDevices;
+        private ArrayList<Integer> mLeRssis;
         private LayoutInflater mInflator;
         public LeDeviceListAdapter() {
             super();
             mLeDevices = new ArrayList<BluetoothDevice>();
+            mLeRssis = new ArrayList<Integer>();
             mInflator = DeviceScanActivity.this.getLayoutInflater();
         }
-        public void addDevice(BluetoothDevice device) {
+        public void addDevice(BluetoothDevice device, int rssi) {
             if(!mLeDevices.contains(device)) {
                 mLeDevices.add(device);
+                mLeRssis.add(rssi);
             }
         }
         public BluetoothDevice getDevice(int position) {
             return mLeDevices.get(position);
         }
+        public int getRssi (int position) {return mLeRssis.get(position); }
         public void clear() {
             mLeDevices.clear();
         }
@@ -200,19 +231,21 @@ public class DeviceScanActivity extends ListActivity {
             if (view == null) {
                 view = mInflator.inflate(R.layout.listitem_device, null);
                 viewHolder = new ViewHolder();
-                viewHolder.deviceAddress = (TextView) view.findViewById(R.id.device_address);
+                viewHolder.deviceRssi = (TextView) view.findViewById(R.id.device_address);
                 viewHolder.deviceName = (TextView) view.findViewById(R.id.device_name);
                 view.setTag(viewHolder);
             } else {
                 viewHolder = (ViewHolder) view.getTag();
             }
             BluetoothDevice device = mLeDevices.get(i);
+            int rssi = mLeRssis.get(i);
+
             final String deviceName = device.getName();
             if (deviceName != null && deviceName.length() > 0)
                 viewHolder.deviceName.setText(deviceName);
             else
                 viewHolder.deviceName.setText(R.string.unknown_device);
-            viewHolder.deviceAddress.setText(device.getAddress());
+            viewHolder.deviceRssi.setText(Integer.toString(rssi));
             return view;
         }
     }
@@ -220,11 +253,12 @@ public class DeviceScanActivity extends ListActivity {
     private BluetoothAdapter.LeScanCallback mLeScanCallback =
             new BluetoothAdapter.LeScanCallback() {
                 @Override
-                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
+                public void onLeScan(final BluetoothDevice device, final int rssi, byte[] scanRecord) {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            mLeDeviceListAdapter.addDevice(device);
+                            Log.d("GEHAD", device.toString());
+                            mLeDeviceListAdapter.addDevice(device, rssi);
                             mLeDeviceListAdapter.notifyDataSetChanged();
                         }
                     });
@@ -232,6 +266,6 @@ public class DeviceScanActivity extends ListActivity {
             };
     static class ViewHolder {
         TextView deviceName;
-        TextView deviceAddress;
+        TextView deviceRssi;
     }
 }
