@@ -43,7 +43,7 @@ import java.util.List;
  * Bluetooth LE API.
  */
 public class ControlActivity extends Activity {
-    private final static String TAG = ControlActivity.class.getSimpleName();
+    private final static String TAG = "HUSSAIN";
     public static final String EXTRAS_DEVICE_NAME = "DEVICE_NAME";
     public static final String EXTRAS_DEVICE_ADDRESS = "DEVICE_ADDRESS";
     private TextView mConnectionState;
@@ -232,6 +232,7 @@ public class ControlActivity extends Activity {
         mGattCharacteristics = new ArrayList<ArrayList<BluetoothGattCharacteristic>>();
         // Loops through available GATT Services.
         for (BluetoothGattService gattService : gattServices) {
+            Log.d(TAG, "displayGattServices: "+gattService.getIncludedServices().toString());
             HashMap<String, String> currentServiceData = new HashMap<String, String>();
             uuid = gattService.getUuid().toString();
             currentServiceData.put(

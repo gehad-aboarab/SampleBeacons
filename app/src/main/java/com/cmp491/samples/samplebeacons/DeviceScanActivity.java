@@ -21,12 +21,16 @@ import android.app.ListActivity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.ParcelUuid;
 import android.support.annotation.NonNull;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -39,18 +43,19 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
-import java.util.UUID;
+
 /**
  * Activity for scanning and displaying available Bluetooth LE devices.
  */
 public class DeviceScanActivity extends ListActivity {
     private LeDeviceListAdapter mLeDeviceListAdapter;
     private BluetoothAdapter mBluetoothAdapter;
+    private BluetoothLeScanner mBluetoothScanner;
     private boolean mScanning;
     private Handler mHandler;
     private static final int REQUEST_ENABLE_BT = 1;
     // Stops scanning after 10 seconds.
-    private static final long SCAN_PERIOD = 10000;
+    private static final long SCAN_PERIOD = 20000;
     private static final int PERMISSION_REQUEST_COARSE_LOCATION = 456;
 
     @Override
@@ -69,6 +74,7 @@ public class DeviceScanActivity extends ListActivity {
         final BluetoothManager bluetoothManager =
                 (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         mBluetoothAdapter = bluetoothManager.getAdapter();
+        mBluetoothScanner = mBluetoothAdapter.getBluetoothLeScanner();
         // Checks if Bluetooth is supported on the device.
         if (mBluetoothAdapter == null) {
             Toast.makeText(this, R.string.error_bluetooth_not_supported, Toast.LENGTH_SHORT).show();
@@ -163,7 +169,7 @@ public class DeviceScanActivity extends ListActivity {
         intent.putExtra(ControlActivity.EXTRAS_DEVICE_NAME, device.getName());
         intent.putExtra(ControlActivity.EXTRAS_DEVICE_ADDRESS, device.getAddress());
         if (mScanning) {
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            mBluetoothScanner.stopScan(mLeScanCallback);
             mScanning = false;
         }
         startActivity(intent);
@@ -175,16 +181,16 @@ public class DeviceScanActivity extends ListActivity {
                 @Override
                 public void run() {
                     mScanning = false;
-                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
+                    mBluetoothScanner.stopScan(mLeScanCallback);
                     invalidateOptionsMenu();
                 }
             }, SCAN_PERIOD);
             mScanning = true;
-            mBluetoothAdapter.startLeScan(mLeScanCallback);
+            mBluetoothScanner.startScan(mLeScanCallback);
 
         } else {
             mScanning = false;
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+            mBluetoothScanner.stopScan(mLeScanCallback);
         }
         invalidateOptionsMenu();
     }
@@ -192,16 +198,19 @@ public class DeviceScanActivity extends ListActivity {
     private class LeDeviceListAdapter extends BaseAdapter {
         private ArrayList<BluetoothDevice> mLeDevices;
         private ArrayList<Integer> mLeRssis;
+        private ArrayList<String> mLeIds;
         private LayoutInflater mInflator;
         public LeDeviceListAdapter() {
             super();
             mLeDevices = new ArrayList<BluetoothDevice>();
             mLeRssis = new ArrayList<Integer>();
+            mLeIds = new ArrayList<String>();
             mInflator = DeviceScanActivity.this.getLayoutInflater();
         }
-        public void addDevice(BluetoothDevice device, int rssi) {
-            if(!mLeDevices.contains(device)) {
+        public void addDevice(BluetoothDevice device, String id, int rssi) {
+            if(!mLeIds.contains(id)) {
                 mLeDevices.add(device);
+                mLeIds.add(id);
                 mLeRssis.add(rssi);
             }
         }
@@ -231,41 +240,112 @@ public class DeviceScanActivity extends ListActivity {
             if (view == null) {
                 view = mInflator.inflate(R.layout.listitem_device, null);
                 viewHolder = new ViewHolder();
-                viewHolder.deviceRssi = (TextView) view.findViewById(R.id.device_address);
-                viewHolder.deviceName = (TextView) view.findViewById(R.id.device_name);
+                viewHolder.deviceRssi = (TextView) view.findViewById(R.id.device_rssi);
+                viewHolder.deviceId = (TextView) view.findViewById(R.id.device_id);
                 view.setTag(viewHolder);
             } else {
                 viewHolder = (ViewHolder) view.getTag();
             }
             BluetoothDevice device = mLeDevices.get(i);
             int rssi = mLeRssis.get(i);
+            String id = mLeIds.get(i);
 
-            final String deviceName = device.getName();
-            if (deviceName != null && deviceName.length() > 0)
-                viewHolder.deviceName.setText(deviceName);
-            else
-                viewHolder.deviceName.setText(R.string.unknown_device);
+//            final String deviceName = device.getAddress();
+//            if (deviceName != null && deviceName.length() > 0)
+//                viewHolder.deviceId.setText(deviceName);
+//            else
+//                viewHolder.deviceId.setText(R.string.unknown_device);
             viewHolder.deviceRssi.setText(Integer.toString(rssi));
+            viewHolder.deviceId.setText(id);
             return view;
         }
     }
     // Device scan callback.
-    private BluetoothAdapter.LeScanCallback mLeScanCallback =
-            new BluetoothAdapter.LeScanCallback() {
+    private ScanCallback mLeScanCallback =
+            new ScanCallback() {
                 @Override
-                public void onLeScan(final BluetoothDevice device, final int rssi, byte[] scanRecord) {
+                public void onScanResult(int callbackType, final ScanResult result) {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            Log.d("GEHAD", device.toString());
-                            mLeDeviceListAdapter.addDevice(device, rssi);
-                            mLeDeviceListAdapter.notifyDataSetChanged();
+                            ArrayList<String> beacons = new ArrayList<String>();
+//                            beacons.add("59bfdda585767280f8"); //Icy B
+//                            beacons.add("283acdcf5be28c0f71"); //Icy A
+//                            beacons.add("5812ca89ff64bf3565"); //Mint B
+//                            beacons.add("6a811095d963f29290"); //Mint A
+//                            beacons.add("3c52a5930c34db2294"); //Coconut B
+//                            beacons.add("4454649ebee76a8e5f"); //Coconut A
+//                            beacons.add("e158516ea666f214c3"); //Blueberry B
+//                            beacons.add("d9b0b6f879088d8f76"); //Blueberry A
+
+                            beacons.add("59bfdda585767280f886db284653ee35"); //Icy B
+                            beacons.add("283acdcf5be28c0f71dc4b6a84219d29"); //Icy A
+                            beacons.add("5812ca89ff64bf356564f5ee641f6f1b"); //Mint B
+                            beacons.add("6a811095d963f29290ea5371b4177020"); //Mint A
+                            beacons.add("3c52a5930c34db229451868164d7fc13"); //Coconut B
+                            beacons.add("4454649ebee76a8e5f23a202825c8401"); //Coconut A
+                            beacons.add("e158516ea666f214c38d5464c5440d1f"); //Blueberry B
+                            beacons.add("d9b0b6f879088d8f767576e07841e43a"); //Blueberry A
+
+                            byte[] bytes = result.getScanRecord().getServiceData(ParcelUuid.fromString("0000fe9a-0000-1000-8000-00805f9b34fb"));
+                            if(bytes != null) {
+                                StringBuilder sb = new StringBuilder();
+                                for (int i = 1; i < bytes.length; i++) {
+                                    if (i <= 16)
+                                        sb.append(String.format("%02x", bytes[i]));
+                                }
+                                if(beacons.contains(sb.toString())) {
+//                                    Log.d("GEHAD", sb.toString());
+                                    BluetoothDevice device = result.getDevice();
+                                    Log.d("GEHAD", "identifier: " + sb.toString() + " address: " + device.getAddress() +  " name: " + device.getName());
+                                    mLeDeviceListAdapter.addDevice(device, sb.toString(), result.getRssi());
+                                    mLeDeviceListAdapter.notifyDataSetChanged();
+                                }
+                            }
                         }
                     });
                 }
             };
     static class ViewHolder {
-        TextView deviceName;
+        TextView deviceId;
         TextView deviceRssi;
     }
+
+//    @Override
+//    public void onScanResult(int callbackType, final ScanResult result) {
+//        super.onScanResult(callbackType, result);
+//
+//        // Get the ScanRecord and check if it is defined (is nullable)
+//        final ScanRecord scanRecord = result.getScanRecord();
+//        if (scanRecord != null) {
+//            // Check if the Service UUIDs are defined (is nullable) and contain the discovery
+//            // UUID
+//            final List<ParcelUuid> serviceUuids = scanRecord.getServiceUuids();
+//            if (serviceUuids != null && serviceUuids.contains(DISCOVERY_UUID)) {
+//                // We have found our device, so update the GUI, stop scanning and start
+//                // connecting
+//                final BluetoothDevice device = result.getDevice();
+//
+//                // We'll make sure the GUI is updated on the UI thread
+//                runOnUiThread(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        // At this point we have the device address and RSSI, so update those
+//                        deviceAddressTextView.setText(device.getAddress());
+//                        rssiTextView.setText(getString(R.string.rssi, result.getRssi()));
+//                    }
+//                });
+//
+//                stopDiscovery();
+//
+//                bluetoothGatt = device.connectGatt(
+//                        MainActivity.this,
+//                        // False here, as we want to directly connect to the device
+//                        false,
+//                        bluetoothGattCallback
+//                );
+//            }
+//        }
+//    }
+
 }

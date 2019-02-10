@@ -14,11 +14,11 @@
     android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
-    <TextView android:id="@+id/device_name"
+    <TextView android:id="@+id/device_id"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="24dp"/>
-    <TextView android:id="@+id/device_address"
+    <TextView android:id="@+id/device_rssi"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="12dp"/>
